@@ -34,7 +34,7 @@
 - 🚨 **Sistema de alertas** configurables por umbrales
 - 💤 **Deep Sleep inteligente** con sensor ultrasónico de presencia
 - 📱 **App Android/iOS** con Firebase Auth
-- 🌐 **Dashboard web** con métricas avanzadas
+- 📊 **Dashboard móvil** con métricas en tiempo real
 
 ---
 
