@@ -38,7 +38,7 @@ class _HomeScreenState extends State<HomeScreen> {
         setState(() {
           temp = double.tryParse(datos['temperatura'].toString()) ?? 0;
           hum  = double.tryParse(datos['humedad'].toString()) ?? 0;
-          co2  = double.tryParse(datos['co2'].toString()) ?? 0;
+          co2  = double.tryParse(datos['co2_ppm'].toString()) ?? 0;
           volt = double.tryParse(datos['voltaje'].toString()) ?? 0;
           
           // Actualizar última lectura
@@ -67,7 +67,7 @@ class _HomeScreenState extends State<HomeScreen> {
           final item = lecturas[key];
           tTemp.add(double.tryParse(item['temperatura'].toString()) ?? 0);
           tHum.add(double.tryParse(item['humedad'].toString()) ?? 0);
-          tCo2.add(double.tryParse(item['co2'].toString()) ?? 0);
+          tCo2.add(double.tryParse(item['co2_ppm'].toString()) ?? 0);
           tVolt.add(double.tryParse(item['voltaje'].toString()) ?? 0);
           
           String ts = item['timestamp'] ?? "00:00";
