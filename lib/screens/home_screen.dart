@@ -38,7 +38,7 @@ class _HomeScreenState extends State<HomeScreen> {
         setState(() {
           temp = double.tryParse(datos['temperatura'].toString()) ?? 0;
           hum  = double.tryParse(datos['humedad'].toString()) ?? 0;
-          co2  = double.tryParse(datos['co2_ppm'].toString()) ?? 0;
+          co2 = double.tryParse(datos['co2_ppm'].toString()) ?? 0;
           volt = double.tryParse(datos['voltaje_ampli'].toString()) ?? 0;
           
           // Actualizar última lectura
