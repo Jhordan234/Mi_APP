@@ -148,7 +148,7 @@ class DashboardTab extends StatelessWidget {
         _sensorCardFullWidth(
           label: 'HUMEDAD',
           unit: '%',
-          valor: humActual.toStringAsFixed(0),
+          valor: humActual.toStringAsFixed(1),
           color: AppTheme.colorSecundario,
           trendIcon: Icons.trending_down,
           histData: histHum,
