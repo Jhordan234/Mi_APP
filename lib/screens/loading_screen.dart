@@ -21,7 +21,7 @@ class _LoadingScreenState extends State<LoadingScreen> with SingleTickerProvider
     // Configuración de la animación de flotación sutil del robotito
     _floatingController = AnimationController(
       vsync: this,
-      duration: const Duration(seconds: 3),
+      duration: const Duration(seconds: 5),
     )..repeat(reverse: true);
 
     _floatingAnimation = Tween<Offset>(
@@ -75,29 +75,14 @@ class _LoadingScreenState extends State<LoadingScreen> with SingleTickerProvider
             child: Column(
               mainAxisAlignment: MainAxisAlignment.center,
               children: [
-                // ROBOTITO CON BORDES REDONDEADOS
+                // ROBOTITO CARGA
                 SlideTransition(
                   position: _floatingAnimation,
-                  child: Container(
-                    decoration: BoxDecoration(
-                      boxShadow: [
-                        BoxShadow(
-                          color: theme.colorScheme.primary.withOpacity(0.15),
-                          blurRadius: 50,
-                          spreadRadius: 2,
-                        ),
-                      ],
-                    ),
-                    child: ClipRRect(
-                      // Aplicamos el redondeo de esquinas al contenedor de la imagen
-                      borderRadius: BorderRadius.circular(25), 
-                      child: Image.asset(
-                        'assets/images/robotito_graficos.png',
-                        height: 250, 
-                        width: 250,  
-                        fit: BoxFit.cover, 
-                      ),
-                    ),
+                  child: Image.asset(
+                    'assets/images/robotito_carga2.png',
+                    height: 250,
+                    width: 250,
+                    fit: BoxFit.contain,
                   ),
                 ),
                 

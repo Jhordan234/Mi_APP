@@ -90,19 +90,17 @@ class _AuthScreenState extends State<AuthScreen>
       backgroundColor: theme.scaffoldBackgroundColor,
       body: Stack(
         children: [
-          // 🌌 Fondo con resplandor radial
+          // 🌌 Imagen de fondo
+          Positioned.fill(
+            child: Image.asset(
+              'assets/images/fondo1.png',
+              fit: BoxFit.cover,
+            ),
+          ),
+          // Overlay oscuro para legibilidad
           Positioned.fill(
             child: Container(
-              decoration: BoxDecoration(
-                gradient: RadialGradient(
-                  center: Alignment.center,
-                  radius: 1.0,
-                  colors: [
-                    theme.colorScheme.primary.withOpacity(0.05),
-                    Colors.transparent,
-                  ],
-                ),
-              ),
+              color: Colors.black.withOpacity(0.55),
             ),
           ),
           Center(
@@ -119,25 +117,11 @@ class _AuthScreenState extends State<AuthScreen>
                     child: Stack(
                       alignment: Alignment.center,
                       children: [
-                        Container(
-                          width: 200,
-                          height: 200,
-                          decoration: BoxDecoration(
-                            shape: BoxShape.circle,
-                            gradient: RadialGradient(
-                              colors: [
-                                theme.colorScheme.primary.withOpacity(0.2),
-                                Colors.transparent,
-                              ],
-                            ),
-                          ),
-                        ),
                         Image.asset(
                           'assets/images/robotito.png',
                           height: 220,
                           fit: BoxFit.contain,
                         ),
-                        // Badge de Estado "Auth Mode"
                         Positioned(
                           bottom: 20,
                           right: 20,

@@ -13,6 +13,7 @@ class _PantallaCargaState extends State<PantallaCarga>
     with SingleTickerProviderStateMixin {
   late AnimationController _controlador;
   late Animation<double> _animacionOpacidad;
+  late Animation<double> _floatingAnim;
 
   @override
   void initState() {
@@ -24,23 +25,31 @@ class _PantallaCargaState extends State<PantallaCarga>
     );
 
     _animacionOpacidad = Tween<double>(begin: 0, end: 1).animate(
-      CurvedAnimation(parent: _controlador, curve: const Interval(0.0, 0.2, curve: Curves.easeIn)),
+      CurvedAnimation(
+        parent: _controlador,
+        curve: const Interval(0.0, 0.2, curve: Curves.easeIn),
+      ),
+    );
+
+    // Animación flotante de la imagen (loop separado)
+    _floatingAnim = Tween<double>(begin: -6, end: 6).animate(
+      CurvedAnimation(parent: _controlador, curve: Curves.easeInOut),
     );
 
     _controlador.forward();
 
-    // 🔵 0% → 50%
     Future.delayed(const Duration(seconds: 1), () async {
       if (!mounted) return;
       await _controlador.animateTo(0.5,
-          duration: const Duration(milliseconds: 1500), curve: Curves.easeOut);
+          duration: const Duration(milliseconds: 1500),
+          curve: Curves.easeOut);
     });
 
-    // 🔵 50% → 100%
     Future.delayed(const Duration(seconds: 4), () async {
       if (!mounted) return;
       await _controlador.animateTo(1.0,
-          duration: const Duration(milliseconds: 2000), curve: Curves.easeInOut);
+          duration: const Duration(milliseconds: 2000),
+          curve: Curves.easeInOut);
 
       await Future.delayed(const Duration(seconds: 1));
 
@@ -61,7 +70,6 @@ class _PantallaCargaState extends State<PantallaCarga>
 
   @override
   Widget build(BuildContext context) {
-    // Usamos el tema actual para no repetir colores
     final theme = Theme.of(context);
 
     return Scaffold(
@@ -70,110 +78,143 @@ class _PantallaCargaState extends State<PantallaCarga>
         builder: (context, child) {
           return Stack(
             children: [
-              // Fondo con resplandor radial corregido
+              // ── Fondo radial ──────────────────────────────────────────────
               Container(
                 decoration: BoxDecoration(
                   gradient: RadialGradient(
                     center: Alignment.center,
-                    radius: 1.0,
+                    radius: 1.2,
                     colors: [
-                      theme.colorScheme.primary.withOpacity(0.05),
+                      theme.colorScheme.primary.withOpacity(0.08),
                       theme.scaffoldBackgroundColor,
                     ],
                   ),
                 ),
               ),
+
+              // ── Contenido centrado ────────────────────────────────────────
               Center(
                 child: Opacity(
                   opacity: _animacionOpacidad.value,
                   child: Column(
                     mainAxisAlignment: MainAxisAlignment.center,
                     children: [
-                      // Icono con Neomorfismo / Resplandor
-                      Container(
-                        padding: const EdgeInsets.all(25),
-                        decoration: BoxDecoration(
-                          color: theme.colorScheme.surface,
-                          borderRadius: BorderRadius.circular(24),
-                          border: Border.all(
-                            color: theme.colorScheme.primary.withOpacity(0.5),
-                            width: 1,
+
+                      // ── IMAGEN con flotación ──────────────────────────────
+                      Transform.translate(
+                        offset: Offset(0, _floatingAnim.value),
+                        child: Container(
+                          decoration: BoxDecoration(
+                            boxShadow: [
+                              BoxShadow(
+                                color: theme.colorScheme.primary.withOpacity(0.2),
+                                blurRadius: 50,
+                                spreadRadius: 4,
+                              ),
+                            ],
                           ),
-                          boxShadow: [
-                            BoxShadow(
-                              color: theme.colorScheme.primary.withOpacity(0.2),
-                              blurRadius: 40,
-                              spreadRadius: 2,
+                          child: Image.asset(
+                            'assets/images/robotito_carga.png',
+                            height: 220,
+                            width: 220,
+                            fit: BoxFit.contain,
+                            errorBuilder: (_, __, ___) => Icon(
+                              Icons.sensors,
+                              color: theme.colorScheme.primary,
+                              size: 80,
                             ),
-                          ],
-                        ),
-                        child: Icon(
-                          Icons.sensors,
-                          color: theme.colorScheme.primary,
-                          size: 64,
+                          ),
                         ),
                       ),
-                      const SizedBox(height: 32),
-                      
-                      // Título con fuente Orbitron para máximo estilo Sci-Fi
+
+                      const SizedBox(height: 40),
+
+                      // ── TÍTULO: CENTRAL (grande) ──────────────────────────
                       Text(
-                        'SYNTH_MONITOR',
+                        'CENTRAL',
                         style: GoogleFonts.orbitron(
-                          fontSize: 30,
+                          fontSize: 38,
                           fontWeight: FontWeight.w900,
                           color: theme.colorScheme.primary,
-                          letterSpacing: 6,
+                          letterSpacing: 8,
+                          height: 1,
                           shadows: [
                             Shadow(
                               color: theme.colorScheme.primary.withOpacity(0.8),
-                              blurRadius: 12,
+                              blurRadius: 16,
                             ),
                           ],
                         ),
                       ),
-                      const SizedBox(height: 12),
-                      
-                      // Subtítulo con letra monoespaciada
+
+                      // ── SUBTÍTULO: DE MONITOREO (pequeño) ────────────────
+                      Text(
+                        'DE MONITOREO',
+                        style: GoogleFonts.orbitron(
+                          fontSize: 14,
+                          fontWeight: FontWeight.w600,
+                          color: theme.colorScheme.primary.withOpacity(0.7),
+                          letterSpacing: 6,
+                          height: 1.4,
+                          shadows: [
+                            Shadow(
+                              color: theme.colorScheme.primary.withOpacity(0.4),
+                              blurRadius: 8,
+                            ),
+                          ],
+                        ),
+                      ),
+
+                      const SizedBox(height: 10),
+
+                      // ── Dot + subtag ──────────────────────────────────────
                       Row(
                         mainAxisAlignment: MainAxisAlignment.center,
                         children: [
                           Container(
-                            width: 8,
-                            height: 8,
+                            width: 7,
+                            height: 7,
                             decoration: BoxDecoration(
-                              color: theme.colorScheme.secondary, // Cambiado de terciario a secundario
+                              color: theme.colorScheme.secondary,
                               shape: BoxShape.circle,
                               boxShadow: [
-                                BoxShadow(color: theme.colorScheme.secondary, blurRadius: 4)
-                              ]
+                                BoxShadow(
+                                  color: theme.colorScheme.secondary,
+                                  blurRadius: 6,
+                                ),
+                              ],
                             ),
                           ),
-                          const SizedBox(width: 10),
+                          const SizedBox(width: 8),
                           Text(
                             'INTERFAZ IoT NEURAL v4.02',
                             style: GoogleFonts.jetBrainsMono(
-                              fontSize: 13,
-                              color: theme.textTheme.bodyMedium?.color?.withOpacity(0.9),
-                              letterSpacing: 2,
+                              fontSize: 11,
+                              color: theme.textTheme.bodyMedium?.color
+                                  ?.withOpacity(0.6),
+                              letterSpacing: 1.5,
                               fontWeight: FontWeight.bold,
                             ),
                           ),
                         ],
                       ),
-                      const SizedBox(height: 80),
-                      
-                      // Barra de progreso y porcentaje
+
+                      const SizedBox(height: 60),
+
+                      // ── Barra de progreso ─────────────────────────────────
                       Padding(
-                        padding: const EdgeInsets.symmetric(horizontal: 50),
+                        padding:
+                            const EdgeInsets.symmetric(horizontal: 50),
                         child: Column(
                           children: [
                             Row(
-                              mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                              mainAxisAlignment:
+                                  MainAxisAlignment.spaceBetween,
                               children: [
                                 Text(
                                   'INICIANDO SISTEMA',
                                   style: GoogleFonts.jetBrainsMono(
-                                    fontSize: 12,
+                                    fontSize: 11,
                                     fontWeight: FontWeight.bold,
                                     color: theme.colorScheme.primary,
                                   ),
@@ -181,26 +222,27 @@ class _PantallaCargaState extends State<PantallaCarga>
                                 Text(
                                   '${(_controlador.value * 100).toInt()}%',
                                   style: GoogleFonts.jetBrainsMono(
-                                    fontSize: 12,
+                                    fontSize: 11,
                                     color: theme.colorScheme.primary,
                                   ),
                                 ),
                               ],
                             ),
-                            const SizedBox(height: 12),
+                            const SizedBox(height: 10),
                             LinearProgressIndicator(
                               value: _controlador.value,
                               backgroundColor: theme.colorScheme.surface,
                               color: theme.colorScheme.primary,
-                              minHeight: 6,
+                              minHeight: 5,
                               borderRadius: BorderRadius.circular(10),
                             ),
                           ],
                         ),
                       ),
-                      const SizedBox(height: 40),
-                      
-                      // Datos técnicos inferiores
+
+                      const SizedBox(height: 36),
+
+                      // ── Info chips inferiores ─────────────────────────────
                       Row(
                         mainAxisAlignment: MainAxisAlignment.center,
                         children: [
@@ -220,30 +262,30 @@ class _PantallaCargaState extends State<PantallaCarga>
     );
   }
 
-Widget _infoChip(BuildContext context, String etiqueta, String valor) {
-  final theme = Theme.of(context);
-  return Column(
-    crossAxisAlignment: CrossAxisAlignment.start,
-    children: [
-      Text(
-        etiqueta,
-        style: GoogleFonts.jetBrainsMono(
-          fontSize: 12, // Subimos el tamaño
-          fontWeight: FontWeight.w800, // Más negrita
-          color: theme.colorScheme.primary.withOpacity(0.6), // Cyan suave
-          letterSpacing: 1.5,
+  Widget _infoChip(BuildContext context, String etiqueta, String valor) {
+    final theme = Theme.of(context);
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Text(
+          etiqueta,
+          style: GoogleFonts.jetBrainsMono(
+            fontSize: 10,
+            fontWeight: FontWeight.w800,
+            color: theme.colorScheme.primary.withOpacity(0.6),
+            letterSpacing: 1.5,
+          ),
         ),
-      ),
-      const SizedBox(height: 4), // Un pequeño espacio
-      Text(
-        valor,
-        style: GoogleFonts.orbitron( // Cambiamos a Orbitron para que se vea futurista
-          fontSize: 16, // Más grande
-          color: Colors.white, // Blanco puro para que resalte sobre el cyan
-          fontWeight: FontWeight.bold,
+        const SizedBox(height: 4),
+        Text(
+          valor,
+          style: GoogleFonts.orbitron(
+            fontSize: 14,
+            color: Colors.white,
+            fontWeight: FontWeight.bold,
+          ),
         ),
-      ),
-    ],
-  );
-}
+      ],
+    );
+  }
 }
