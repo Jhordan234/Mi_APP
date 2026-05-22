@@ -131,90 +131,189 @@ class DashboardTab extends StatelessWidget {
     );
   }
 
-  // ✅ INDICADORES TIEMPO REAL RESPONSIVE
+  // ── SENSOR CARDS — una por fila con sparkline ──────────────────────────────
   Widget _indicadoresTiempoReal(bool compact) {
-    final items = [
-      {'label': 'TEMP', 'valor': '${tempActual.toStringAsFixed(1)}°C', 'color': AppTheme.colorPrimario, 'icon': Icons.thermostat},
-      {'label': 'HUM',  'valor': '${humActual.toStringAsFixed(0)}%',   'color': AppTheme.colorSecundario, 'icon': Icons.water_drop},
-      {'label': 'CO₂',  'valor': '${co2Actual.toStringAsFixed(0)}',    'color': AppTheme.colorError, 'icon': Icons.co2},
-      {'label': 'VOLT', 'valor': '${voltActual.toStringAsFixed(2)}V',  'color': AppTheme.colorTerciario, 'icon': Icons.bolt},
-    ];
+    return Column(
+      children: [
+        _sensorCardFullWidth(
+          label: 'TEMPERATURA',
+          unit: '°C',
+          valor: tempActual.toStringAsFixed(1),
+          color: AppTheme.colorPrimario,
+          trendIcon: Icons.trending_flat,
+          histData: histTemp,
+          compact: compact,
+        ),
+        SizedBox(height: compact ? 8 : 12),
+        _sensorCardFullWidth(
+          label: 'HUMEDAD',
+          unit: '%',
+          valor: humActual.toStringAsFixed(0),
+          color: AppTheme.colorSecundario,
+          trendIcon: Icons.trending_down,
+          histData: histHum,
+          compact: compact,
+        ),
+        SizedBox(height: compact ? 8 : 12),
+        _sensorCardFullWidth(
+          label: 'CO₂',
+          unit: 'ppm',
+          valor: co2Actual.toStringAsFixed(0),
+          color: AppTheme.colorError,
+          trendIcon: Icons.trending_up,
+          histData: histCo2,
+          compact: compact,
+        ),
+        SizedBox(height: compact ? 8 : 12),
+        _sensorCardFullWidth(
+          label: 'VOLTAJE',
+          unit: 'V',
+          valor: voltActual.toStringAsFixed(2),
+          color: AppTheme.colorTerciario,
+          trendIcon: Icons.trending_flat,
+          histData: histVolt,
+          compact: compact,
+        ),
+      ],
+    );
+  }
+
+  Widget _sensorCardFullWidth({
+    required String label,
+    required String unit,
+    required String valor,
+    required Color color,
+    required IconData trendIcon,
+    required List<double> histData,
+    required bool compact,
+  }) {
+    // Construir spots para el sparkline
+    final List<FlSpot> spots = histData.isEmpty
+        ? [const FlSpot(0, 0), const FlSpot(1, 0)]
+        : histData.asMap().entries
+            .map((e) => FlSpot(e.key.toDouble(), e.value))
+            .toList();
+
+    final double minY = histData.isEmpty
+        ? 0
+        : histData.reduce((a, b) => a < b ? a : b) - 1;
+    final double maxY = histData.isEmpty
+        ? 1
+        : histData.reduce((a, b) => a > b ? a : b) + 1;
 
     return Container(
-      padding: EdgeInsets.all(compact ? 10 : 14),
+      padding: EdgeInsets.all(compact ? 14 : 18),
       decoration: BoxDecoration(
-        gradient: LinearGradient(
-          colors: [AppTheme.colorSuperficieAlta, AppTheme.colorSuperficie],
-          begin: Alignment.topLeft,
-          end: Alignment.bottomRight,
-        ),
+        color: AppTheme.colorSuperficieAlta,
         borderRadius: BorderRadius.circular(compact ? 12 : 16),
-        border: Border.all(color: Colors.white.withOpacity(0.08)),
+        border: Border.all(color: color.withOpacity(0.18)),
+        boxShadow: [
+          BoxShadow(
+            color: color.withOpacity(0.06),
+            blurRadius: 16,
+            spreadRadius: 1,
+          ),
+        ],
       ),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
+      child: Row(
+        crossAxisAlignment: CrossAxisAlignment.center,
         children: [
-          Row(
-            children: [
-              Icon(Icons.online_prediction, color: AppTheme.colorPrimario, size: compact ? 10 : 14),
-              SizedBox(width: compact ? 4 : 6),
-              Text('MONITOREO EN VIVO',
-                style: GoogleFonts.spaceGrotesk(
-                  fontSize: compact ? 7 : 9,
-                  color: AppTheme.colorPrimario,
-                  letterSpacing: 2,
-                  fontWeight: FontWeight.bold,
+          // ── Lado izquierdo: dot + valor + labels ────────────────────────
+          Expanded(
+            flex: 5,
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                // Dot indicador + icono de tendencia
+                Row(children: [
+                  Container(
+                    width: compact ? 7 : 9,
+                    height: compact ? 7 : 9,
+                    decoration: BoxDecoration(
+                      shape: BoxShape.circle,
+                      color: color,
+                      boxShadow: [
+                        BoxShadow(color: color.withOpacity(0.6), blurRadius: 6),
+                      ],
+                    ),
+                  ),
+                  SizedBox(width: compact ? 6 : 8),
+                  Icon(trendIcon, color: Colors.white24, size: compact ? 13 : 15),
+                ]),
+                SizedBox(height: compact ? 8 : 10),
+
+                // Valor grande
+                Text(
+                  valor,
+                  style: GoogleFonts.orbitron(
+                    fontSize: compact ? 34 : 42,
+                    fontWeight: FontWeight.w900,
+                    color: Colors.white,
+                    letterSpacing: -1,
+                    height: 1,
+                  ),
+                ),
+                SizedBox(height: compact ? 4 : 5),
+
+                // Label
+                Text(
+                  label,
+                  style: GoogleFonts.spaceGrotesk(
+                    fontSize: compact ? 9 : 11,
+                    fontWeight: FontWeight.bold,
+                    color: Colors.white54,
+                    letterSpacing: 1.5,
+                  ),
+                ),
+                // Unidad
+                Text(
+                  unit,
+                  style: GoogleFonts.jetBrainsMono(
+                    fontSize: compact ? 10 : 12,
+                    color: Colors.white24,
+                  ),
+                ),
+              ],
+            ),
+          ),
+
+          // ── Lado derecho: sparkline ────────────────────────────────────
+          Expanded(
+            flex: 6,
+            child: SizedBox(
+              height: compact ? 70 : 80,
+              child: LineChart(
+                LineChartData(
+                  minY: minY,
+                  maxY: maxY,
+                  clipData: const FlClipData.all(),
+                  gridData: const FlGridData(show: false),
+                  titlesData: const FlTitlesData(show: false),
+                  borderData: FlBorderData(show: false),
+                  lineBarsData: [
+                    LineChartBarData(
+                      spots: spots,
+                      isCurved: true,
+                      curveSmoothness: 0.4,
+                      color: color,
+                      barWidth: 2.5,
+                      dotData: const FlDotData(show: false),
+                      belowBarData: BarAreaData(
+                        show: true,
+                        gradient: LinearGradient(
+                          begin: Alignment.topCenter,
+                          end: Alignment.bottomCenter,
+                          colors: [
+                            color.withOpacity(0.3),
+                            color.withOpacity(0.0),
+                          ],
+                        ),
+                      ),
+                    ),
+                  ],
                 ),
               ),
-              const Spacer(),
-              _badge('2s', AppTheme.colorPrimario, compact),
-            ],
-          ),
-          SizedBox(height: compact ? 10 : 14),
-          Row(
-            children: items.map((item) {
-              final color = item['color'] as Color;
-              return Expanded(
-                child: Container(
-                  margin: EdgeInsets.symmetric(horizontal: compact ? 2 : 4),
-                  padding: EdgeInsets.symmetric(
-                    vertical: compact ? 8 : 12,
-                    horizontal: compact ? 2 : 6,
-                  ),
-                  decoration: BoxDecoration(
-                    color: color.withOpacity(0.08),
-                    borderRadius: BorderRadius.circular(compact ? 8 : 12),
-                    border: Border.all(color: color.withOpacity(0.2)),
-                  ),
-                  child: Column(
-                    children: [
-                      Icon(item['icon'] as IconData, color: color, size: compact ? 12 : 16),
-                      SizedBox(height: compact ? 4 : 6),
-                      FittedBox(
-                        child: Text(item['label'] as String,
-                          style: GoogleFonts.spaceGrotesk(
-                            fontSize: compact ? 6 : 8,
-                            color: color.withOpacity(0.7),
-                            fontWeight: FontWeight.bold,
-                            letterSpacing: 1,
-                          ),
-                        ),
-                      ),
-                      SizedBox(height: compact ? 2 : 4),
-                      FittedBox(
-                        child: Text(item['valor'] as String,
-                          style: GoogleFonts.orbitron(
-                            fontSize: compact ? 10 : 13,
-                            fontWeight: FontWeight.w900,
-                            color: color,
-                          ),
-                        ),
-                      ),
-                    ],
-                  ),
-                ),
-              );
-            }).toList(),
+            ),
           ),
         ],
       ),
