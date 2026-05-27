@@ -27,6 +27,14 @@ class DashboardTab extends StatelessWidget {
   double get _promHum  => histHum.isEmpty  ? 0 : histHum.reduce((a, b) => a + b) / histHum.length;
   double get _promCo2  => histCo2.isEmpty  ? 0 : histCo2.reduce((a, b) => a + b) / histCo2.length;
 
+  // ── Color dinámico SOLO para la card de CO₂ ───────────────────────────────
+  // ≥ 1000 ppm → Rojo  |  600–999 ppm → Naranja  |  ≤ 599 ppm → Verde
+  Color _co2Color(double ppm) {
+    if (ppm >= 1000) return AppTheme.colorError;
+    if (ppm >= 600)  return const Color(0xFFFF8C00);
+    return const Color(0xFF00C17C);
+  }
+
   @override
   Widget build(BuildContext context) {
     final screenWidth = MediaQuery.of(context).size.width;
@@ -159,7 +167,7 @@ class DashboardTab extends StatelessWidget {
           label: 'CO₂',
           unit: 'ppm',
           valor: co2Actual.toStringAsFixed(0),
-          color: AppTheme.colorError,
+          color: _co2Color(co2Actual),       // ← ÚNICO CAMBIO
           trendIcon: Icons.trending_up,
           histData: histCo2,
           compact: compact,
