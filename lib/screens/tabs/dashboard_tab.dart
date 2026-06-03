@@ -8,15 +8,26 @@ class DashboardTab extends StatelessWidget {
   final List<double> histTemp, histHum, histCo2, histVolt;
   final List<String> histTime;
 
+  // ── Buffer de tiempo real (20 puntos) para los sparklines ──
+  // Se llena con cada dato nuevo que llega del ESP32
+  // Es independiente del historial de Firebase
+  final List<double> bufTemp, bufHum, bufCo2, bufVolt;
+
   const DashboardTab({super.key,
     required this.tempActual, required this.humActual,
-    required this.co2Actual, required this.voltActual,
-    required this.histTemp, required this.histHum,
-    required this.histCo2, required this.histVolt,
+    required this.co2Actual,  required this.voltActual,
+    required this.histTemp,   required this.histHum,
+    required this.histCo2,    required this.histVolt,
     required this.histTime,
+    // Buffer — tiene valor por defecto vacío para no romper
+    // si alguien instancia DashboardTab sin pasarlo
+    this.bufTemp = const [],
+    this.bufHum  = const [],
+    this.bufCo2  = const [],
+    this.bufVolt = const [],
   });
 
-  // Cálculos del historial
+  // Cálculos del historial (para la tarjeta de picos)
   double get _maxTemp => histTemp.isEmpty ? 0 : histTemp.reduce((a, b) => a > b ? a : b);
   double get _minTemp => histTemp.isEmpty ? 0 : histTemp.reduce((a, b) => a < b ? a : b);
   double get _maxHum  => histHum.isEmpty  ? 0 : histHum.reduce((a, b) => a > b ? a : b);
@@ -27,8 +38,7 @@ class DashboardTab extends StatelessWidget {
   double get _promHum  => histHum.isEmpty  ? 0 : histHum.reduce((a, b) => a + b) / histHum.length;
   double get _promCo2  => histCo2.isEmpty  ? 0 : histCo2.reduce((a, b) => a + b) / histCo2.length;
 
-  // ── Color dinámico SOLO para la card de CO₂ ───────────────────────────────
-  // ≥ 1000 ppm → Rojo  |  600–999 ppm → Naranja  |  ≤ 599 ppm → Verde
+  // Color dinámico para CO₂
   Color _co2Color(double ppm) {
     if (ppm >= 1000) return AppTheme.colorError;
     if (ppm >= 600)  return const Color(0xFFFF8C00);
@@ -57,9 +67,17 @@ class DashboardTab extends StatelessWidget {
           SizedBox(height: isSmallScreen ? 6 : 8),
           _graficaMultiLinea(isSmallScreen),
           SizedBox(height: isSmallScreen ? 12 : 20),
-          _titulo('COMPARATIVA — HUM vs CO₂', isSmallScreen),
+          _titulo('COMPARATIVA — TEMP vs HUM', isSmallScreen),
           SizedBox(height: isSmallScreen ? 6 : 8),
-          _graficaBarrasComparativa(isSmallScreen),
+          _graficaBarrasTempHum(isSmallScreen),
+          SizedBox(height: isSmallScreen ? 12 : 20),
+          _titulo('CO₂ POR NIVEL — PPM', isSmallScreen),
+          SizedBox(height: isSmallScreen ? 6 : 8),
+          _graficaCo2Horizontal(isSmallScreen),
+          SizedBox(height: isSmallScreen ? 12 : 20),
+          _titulo('PROMEDIO NORMALIZADO — SESIÓN ACTUAL', isSmallScreen),
+          SizedBox(height: isSmallScreen ? 6 : 8),
+          _graficaPastel(isSmallScreen),
           SizedBox(height: isSmallScreen ? 12 : 20),
           _titulo('FLUCTUACIÓN — CO₂ PPM', isSmallScreen),
           SizedBox(height: isSmallScreen ? 6 : 8),
@@ -74,7 +92,6 @@ class DashboardTab extends StatelessWidget {
     );
   }
 
-  // ✅ ENCABEZADO RESPONSIVE
   Widget _encabezado(bool compact) {
     return Row(
       mainAxisAlignment: MainAxisAlignment.spaceBetween,
@@ -139,7 +156,7 @@ class DashboardTab extends StatelessWidget {
     );
   }
 
-  // ── SENSOR CARDS — una por fila con sparkline ──────────────────────────────
+  // ── 4 CARDS — sparkline usa el BUFFER (tiempo real) ──────────
   Widget _indicadoresTiempoReal(bool compact) {
     return Column(
       children: [
@@ -149,7 +166,8 @@ class DashboardTab extends StatelessWidget {
           valor: tempActual.toStringAsFixed(1),
           color: AppTheme.colorPrimario,
           trendIcon: Icons.trending_flat,
-          histData: histTemp,
+          // ← bufTemp en lugar de histTemp
+          sparkData: bufTemp,
           compact: compact,
         ),
         SizedBox(height: compact ? 8 : 12),
@@ -159,7 +177,7 @@ class DashboardTab extends StatelessWidget {
           valor: humActual.toStringAsFixed(1),
           color: AppTheme.colorSecundario,
           trendIcon: Icons.trending_down,
-          histData: histHum,
+          sparkData: bufHum,
           compact: compact,
         ),
         SizedBox(height: compact ? 8 : 12),
@@ -167,9 +185,9 @@ class DashboardTab extends StatelessWidget {
           label: 'CO₂',
           unit: 'ppm',
           valor: co2Actual.toStringAsFixed(0),
-          color: _co2Color(co2Actual),       // ← ÚNICO CAMBIO
+          color: _co2Color(co2Actual),
           trendIcon: Icons.trending_up,
-          histData: histCo2,
+          sparkData: bufCo2,
           compact: compact,
         ),
         SizedBox(height: compact ? 8 : 12),
@@ -179,7 +197,7 @@ class DashboardTab extends StatelessWidget {
           valor: voltActual.toStringAsFixed(2),
           color: AppTheme.colorTerciario,
           trendIcon: Icons.trending_flat,
-          histData: histVolt,
+          sparkData: bufVolt,
           compact: compact,
         ),
       ],
@@ -192,22 +210,23 @@ class DashboardTab extends StatelessWidget {
     required String valor,
     required Color color,
     required IconData trendIcon,
-    required List<double> histData,
+    required List<double> sparkData, // ← renombrado de histData
     required bool compact,
   }) {
-    // Construir spots para el sparkline
-    final List<FlSpot> spots = histData.isEmpty
+    // Sparkline con el buffer de tiempo real
+    // Si hay menos de 2 puntos muestra una línea plana (esperando datos)
+    final List<FlSpot> spots = sparkData.length < 2
         ? [const FlSpot(0, 0), const FlSpot(1, 0)]
-        : histData.asMap().entries
+        : sparkData.asMap().entries
             .map((e) => FlSpot(e.key.toDouble(), e.value))
             .toList();
 
-    final double minY = histData.isEmpty
+    final double minY = sparkData.isEmpty
         ? 0
-        : histData.reduce((a, b) => a < b ? a : b) - 1;
-    final double maxY = histData.isEmpty
+        : sparkData.reduce((a, b) => a < b ? a : b) - 1;
+    final double maxY = sparkData.isEmpty
         ? 1
-        : histData.reduce((a, b) => a > b ? a : b) + 1;
+        : sparkData.reduce((a, b) => a > b ? a : b) + 1;
 
     return Container(
       padding: EdgeInsets.all(compact ? 14 : 18),
@@ -226,13 +245,12 @@ class DashboardTab extends StatelessWidget {
       child: Row(
         crossAxisAlignment: CrossAxisAlignment.center,
         children: [
-          // ── Lado izquierdo: dot + valor + labels ────────────────────────
+          // Lado izquierdo: valor + label
           Expanded(
             flex: 5,
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                // Dot indicador + icono de tendencia
                 Row(children: [
                   Container(
                     width: compact ? 7 : 9,
@@ -241,18 +259,17 @@ class DashboardTab extends StatelessWidget {
                       shape: BoxShape.circle,
                       color: color,
                       boxShadow: [
-                        BoxShadow(color: color.withOpacity(0.6), blurRadius: 6),
+                        BoxShadow(
+                            color: color.withOpacity(0.6), blurRadius: 6),
                       ],
                     ),
                   ),
                   SizedBox(width: compact ? 6 : 8),
-                  Icon(trendIcon, color: Colors.white24, size: compact ? 13 : 15),
+                  Icon(trendIcon,
+                      color: Colors.white24, size: compact ? 13 : 15),
                 ]),
                 SizedBox(height: compact ? 8 : 10),
-
-                // Valor grande
-                Text(
-                  valor,
+                Text(valor,
                   style: GoogleFonts.orbitron(
                     fontSize: compact ? 34 : 42,
                     fontWeight: FontWeight.w900,
@@ -262,10 +279,7 @@ class DashboardTab extends StatelessWidget {
                   ),
                 ),
                 SizedBox(height: compact ? 4 : 5),
-
-                // Label
-                Text(
-                  label,
+                Text(label,
                   style: GoogleFonts.spaceGrotesk(
                     fontSize: compact ? 9 : 11,
                     fontWeight: FontWeight.bold,
@@ -273,9 +287,7 @@ class DashboardTab extends StatelessWidget {
                     letterSpacing: 1.5,
                   ),
                 ),
-                // Unidad
-                Text(
-                  unit,
+                Text(unit,
                   style: GoogleFonts.jetBrainsMono(
                     fontSize: compact ? 10 : 12,
                     color: Colors.white24,
@@ -285,42 +297,73 @@ class DashboardTab extends StatelessWidget {
             ),
           ),
 
-          // ── Lado derecho: sparkline ────────────────────────────────────
+          // Lado derecho: sparkline en tiempo real
           Expanded(
             flex: 6,
-            child: SizedBox(
-              height: compact ? 70 : 80,
-              child: LineChart(
-                LineChartData(
-                  minY: minY,
-                  maxY: maxY,
-                  clipData: const FlClipData.all(),
-                  gridData: const FlGridData(show: false),
-                  titlesData: const FlTitlesData(show: false),
-                  borderData: FlBorderData(show: false),
-                  lineBarsData: [
-                    LineChartBarData(
-                      spots: spots,
-                      isCurved: true,
-                      curveSmoothness: 0.4,
-                      color: color,
-                      barWidth: 2.5,
-                      dotData: const FlDotData(show: false),
-                      belowBarData: BarAreaData(
-                        show: true,
-                        gradient: LinearGradient(
-                          begin: Alignment.topCenter,
-                          end: Alignment.bottomCenter,
-                          colors: [
-                            color.withOpacity(0.3),
-                            color.withOpacity(0.0),
-                          ],
-                        ),
-                      ),
-                    ),
-                  ],
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.end,
+              children: [
+                // Etiqueta pequeña que indica que es en vivo
+                Text(
+                  sparkData.length < 2 ? 'ESPERANDO...' : 'EN VIVO',
+                  style: GoogleFonts.jetBrainsMono(
+                    fontSize: 7,
+                    color: sparkData.length < 2
+                        ? Colors.white12
+                        : color.withOpacity(0.5),
+                    letterSpacing: 1,
+                  ),
                 ),
-              ),
+                const SizedBox(height: 4),
+                SizedBox(
+                  height: compact ? 60 : 70,
+                  child: LineChart(
+                    duration: const Duration(milliseconds: 150),
+                    // ↑ animación suave entre punto y punto
+                    LineChartData(
+                      minY: minY,
+                      maxY: maxY,
+                      clipData: const FlClipData.all(),
+                      gridData: const FlGridData(show: false),
+                      titlesData: const FlTitlesData(show: false),
+                      borderData: FlBorderData(show: false),
+                      lineBarsData: [
+                        LineChartBarData(
+                          spots: spots,
+                          isCurved: true,
+                          curveSmoothness: 0.3,
+                          color: color,
+                          barWidth: 2.5,
+                          dotData: FlDotData(
+                            show: true,
+                            // Solo muestra el punto más reciente
+                            checkToShowDot: (spot, barData) =>
+                                spot.x == spots.last.x,
+                            getDotPainter: (_, __, ___, ____) =>
+                                FlDotCirclePainter(
+                                  radius: 3,
+                                  color: color,
+                                  strokeWidth: 1.5,
+                                  strokeColor: Colors.white24,
+                                ),
+                          ),
+                          belowBarData: BarAreaData(
+                            show: true,
+                            gradient: LinearGradient(
+                              begin: Alignment.topCenter,
+                              end: Alignment.bottomCenter,
+                              colors: [
+                                color.withOpacity(0.3),
+                                color.withOpacity(0.0),
+                              ],
+                            ),
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
+                ),
+              ],
             ),
           ),
         ],
@@ -328,7 +371,6 @@ class DashboardTab extends StatelessWidget {
     );
   }
 
-  // ✅ TARJETA PICOS RESPONSIVE
   Widget _tarjetaPicos(bool compact) {
     final sensores = [
       {
@@ -372,7 +414,6 @@ class DashboardTab extends StatelessWidget {
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                // Título + valor actual
                 Row(
                   mainAxisAlignment: MainAxisAlignment.spaceBetween,
                   children: [
@@ -397,7 +438,8 @@ class DashboardTab extends StatelessWidget {
                       child: Row(
                         mainAxisSize: MainAxisSize.min,
                         children: [
-                          Icon(Icons.circle, color: color, size: compact ? 5 : 6),
+                          Icon(Icons.circle,
+                              color: color, size: compact ? 5 : 6),
                           SizedBox(width: compact ? 2 : 4),
                           Text('AHORA ${s['actual']}',
                             style: GoogleFonts.orbitron(
@@ -412,7 +454,6 @@ class DashboardTab extends StatelessWidget {
                   ],
                 ),
                 SizedBox(height: compact ? 6 : 8),
-                // Métricas MÁX/MÍN/PROM
                 Row(children: [
                   Expanded(child: _indicadorPico('MÁX', s['max'] as String, color, Icons.arrow_upward, compact)),
                   SizedBox(width: compact ? 4 : 6),
@@ -430,7 +471,8 @@ class DashboardTab extends StatelessWidget {
     );
   }
 
-  Widget _indicadorPico(String etiqueta, String valor, Color color, IconData icono, bool compact) {
+  Widget _indicadorPico(String etiqueta, String valor, Color color,
+      IconData icono, bool compact) {
     return Container(
       padding: EdgeInsets.symmetric(
         vertical: compact ? 6 : 8,
@@ -525,7 +567,7 @@ class DashboardTab extends StatelessWidget {
                     final i = v.toInt();
                     if (i < 0 || i >= histTime.length) return const SizedBox();
                     return Padding(
-                      padding: EdgeInsets.only(top: 4),
+                      padding: const EdgeInsets.only(top: 4),
                       child: Text(histTime[i],
                         style: GoogleFonts.jetBrainsMono(
                           fontSize: compact ? 6 : 7,
@@ -547,7 +589,8 @@ class DashboardTab extends StatelessWidget {
                   barWidth: 2,
                   dotData: const FlDotData(show: false),
                   belowBarData: BarAreaData(
-                    show: true, color: AppTheme.colorPrimario.withOpacity(0.05)),
+                    show: true,
+                    color: AppTheme.colorPrimario.withOpacity(0.05)),
                 ),
                 LineChartBarData(
                   spots: histHum.asMap().entries
@@ -558,7 +601,8 @@ class DashboardTab extends StatelessWidget {
                   dashArray: [5, 3],
                   dotData: const FlDotData(show: false),
                   belowBarData: BarAreaData(
-                    show: true, color: AppTheme.colorSecundario.withOpacity(0.05)),
+                    show: true,
+                    color: AppTheme.colorSecundario.withOpacity(0.05)),
                 ),
               ],
             )),
@@ -582,92 +626,7 @@ class DashboardTab extends StatelessWidget {
     ]);
   }
 
-  Widget _graficaBarrasComparativa(bool compact) {
-    if (histHum.isEmpty || histCo2.isEmpty) return _sinDatos(compact);
 
-    final co2Max = histCo2.reduce((a, b) => a > b ? a : b);
-    final co2Norm = histCo2.map((v) => (v / (co2Max == 0 ? 1 : co2Max)) * 100).toList();
-
-    return Container(
-      height: compact ? 150 : 200,
-      padding: EdgeInsets.fromLTRB(4, compact ? 8 : 12, compact ? 8 : 12, 8),
-      decoration: BoxDecoration(
-        color: AppTheme.colorSuperficie,
-        borderRadius: BorderRadius.circular(compact ? 10 : 14),
-        border: Border.all(color: Colors.white.withOpacity(0.06)),
-      ),
-      child: Column(
-        children: [
-          Row(mainAxisAlignment: MainAxisAlignment.end, children: [
-            _leyendaBar('Hum. %', AppTheme.colorSecundario, compact),
-            SizedBox(width: compact ? 8 : 12),
-            _leyendaBar('CO₂', AppTheme.colorError, compact),
-          ]),
-          SizedBox(height: compact ? 4 : 8),
-          Expanded(
-            child: BarChart(BarChartData(
-              maxY: 110,
-              gridData: FlGridData(
-                show: true, drawVerticalLine: false,
-                getDrawingHorizontalLine: (_) =>
-                    FlLine(color: Colors.white.withOpacity(0.04), strokeWidth: 1),
-              ),
-              titlesData: FlTitlesData(
-                leftTitles: AxisTitles(sideTitles: SideTitles(
-                  showTitles: true,
-                  reservedSize: compact ? 22 : 28,
-                  getTitlesWidget: (v, _) => Text('${v.toInt()}%',
-                    style: GoogleFonts.jetBrainsMono(
-                      fontSize: compact ? 7 : 8,
-                      color: Colors.white24,
-                    )),
-                )),
-                bottomTitles: AxisTitles(sideTitles: SideTitles(
-                  showTitles: true,
-                  getTitlesWidget: (v, _) {
-                    final i = v.toInt();
-                    if (i < 0 || i >= histTime.length) return const SizedBox();
-                    return Padding(
-                      padding: EdgeInsets.only(top: 4),
-                      child: Text(histTime[i],
-                        style: GoogleFonts.jetBrainsMono(
-                          fontSize: compact ? 6 : 7,
-                          color: Colors.white24,
-                        )),
-                    );
-                  },
-                )),
-                rightTitles: const AxisTitles(sideTitles: SideTitles(showTitles: false)),
-                topTitles: const AxisTitles(sideTitles: SideTitles(showTitles: false)),
-              ),
-              borderData: FlBorderData(show: false),
-              barGroups: List.generate(
-                histHum.length > co2Norm.length ? co2Norm.length : histHum.length,
-                (i) => BarChartGroupData(
-                  x: i,
-                  barsSpace: 2,
-                  barRods: [
-                    BarChartRodData(
-                      toY: histHum[i],
-                      color: AppTheme.colorSecundario.withOpacity(0.8),
-                      width: compact ? 4 : 6,
-                      borderRadius: BorderRadius.circular(2),
-                    ),
-                    BarChartRodData(
-                      toY: co2Norm[i],
-                      color: AppTheme.colorError.withOpacity(0.8),
-                      width: compact ? 4 : 6,
-                      borderRadius: BorderRadius.circular(2),
-                    ),
-                  ],
-                ),
-              ),
-            )),
-          ),
-        ],
-      ),
-    );
-  }
 
   Widget _leyendaBar(String texto, Color color, bool compact) {
     return Row(children: [
@@ -711,7 +670,8 @@ class DashboardTab extends StatelessWidget {
           leftTitles: AxisTitles(sideTitles: SideTitles(
             showTitles: true, reservedSize: 32,
             getTitlesWidget: (v, _) => Text(v.toStringAsFixed(0),
-              style: GoogleFonts.jetBrainsMono(fontSize: 8, color: Colors.white24)),
+              style: GoogleFonts.jetBrainsMono(
+                  fontSize: 8, color: Colors.white24)),
           )),
           bottomTitles: AxisTitles(sideTitles: SideTitles(
             showTitles: true, interval: 2,
@@ -721,12 +681,13 @@ class DashboardTab extends StatelessWidget {
               return Padding(
                 padding: const EdgeInsets.only(top: 4),
                 child: Text(histTime[i],
-                  style: GoogleFonts.jetBrainsMono(fontSize: 7, color: Colors.white24)),
+                  style: GoogleFonts.jetBrainsMono(
+                      fontSize: 7, color: Colors.white24)),
               );
             },
           )),
           rightTitles: const AxisTitles(sideTitles: SideTitles(showTitles: false)),
-          topTitles: const AxisTitles(sideTitles: SideTitles(showTitles: false)),
+          topTitles:   const AxisTitles(sideTitles: SideTitles(showTitles: false)),
         ),
         borderData: FlBorderData(show: false),
         lineBarsData: [
@@ -736,10 +697,12 @@ class DashboardTab extends StatelessWidget {
             isCurved: true,
             color: color,
             barWidth: 2,
-            dotData: FlDotData(show: true,
-              getDotPainter: (_, __, ___, ____) =>
-                  FlDotCirclePainter(radius: 2.5, color: color, strokeWidth: 0)),
-            belowBarData: BarAreaData(show: true, color: color.withOpacity(0.07)),
+            dotData: FlDotData(
+              show: true,
+              getDotPainter: (_, __, ___, ____) => FlDotCirclePainter(
+                  radius: 2.5, color: color, strokeWidth: 0)),
+            belowBarData:
+                BarAreaData(show: true, color: color.withOpacity(0.07)),
           ),
         ],
       )),
@@ -771,6 +734,377 @@ class DashboardTab extends StatelessWidget {
             color: Colors.white24,
           ),
         ),
+      ),
+    );
+  }
+
+  // ============================================================
+  //  GRÁFICA BARRAS — TEMP vs HUM
+  //  Reemplaza la comparativa HUM vs CO2 anterior
+  //  Ambas tienen escalas similares (0-100) → comparación válida
+  // ============================================================
+  Widget _graficaBarrasTempHum(bool compact) {
+    if (histTemp.isEmpty || histHum.isEmpty) return _sinDatos(compact);
+
+    return Container(
+      height: compact ? 150 : 200,
+      padding: EdgeInsets.fromLTRB(4, compact ? 8 : 12, compact ? 8 : 12, 8),
+      decoration: BoxDecoration(
+        color: AppTheme.colorSuperficie,
+        borderRadius: BorderRadius.circular(compact ? 10 : 14),
+        border: Border.all(color: Colors.white.withOpacity(0.06)),
+      ),
+      child: Column(
+        children: [
+          Row(mainAxisAlignment: MainAxisAlignment.end, children: [
+            _leyendaBar('Temp. °C', AppTheme.colorPrimario, compact),
+            SizedBox(width: compact ? 8 : 12),
+            _leyendaBar('Hum. %', AppTheme.colorSecundario, compact),
+          ]),
+          SizedBox(height: compact ? 4 : 8),
+          Expanded(
+            child: BarChart(BarChartData(
+              maxY: 110,
+              minY: 0,
+              gridData: FlGridData(
+                show: true,
+                drawVerticalLine: false,
+                getDrawingHorizontalLine: (_) =>
+                    FlLine(color: Colors.white.withOpacity(0.04), strokeWidth: 1),
+              ),
+              titlesData: FlTitlesData(
+                leftTitles: AxisTitles(sideTitles: SideTitles(
+                  showTitles: true,
+                  reservedSize: compact ? 22 : 28,
+                  getTitlesWidget: (v, _) => Text(v.toStringAsFixed(0),
+                    style: GoogleFonts.jetBrainsMono(
+                      fontSize: compact ? 7 : 8, color: Colors.white24)),
+                )),
+                bottomTitles: AxisTitles(sideTitles: SideTitles(
+                  showTitles: true,
+                  getTitlesWidget: (v, _) {
+                    final i = v.toInt();
+                    if (i < 0 || i >= histTime.length) return const SizedBox();
+                    return Padding(
+                      padding: const EdgeInsets.only(top: 4),
+                      child: Text(histTime[i],
+                        style: GoogleFonts.jetBrainsMono(
+                          fontSize: compact ? 6 : 7, color: Colors.white24)),
+                    );
+                  },
+                )),
+                rightTitles: const AxisTitles(sideTitles: SideTitles(showTitles: false)),
+                topTitles:   const AxisTitles(sideTitles: SideTitles(showTitles: false)),
+              ),
+              borderData: FlBorderData(show: false),
+              barGroups: List.generate(
+                histTemp.length > histHum.length
+                    ? histHum.length
+                    : histTemp.length,
+                (i) => BarChartGroupData(
+                  x: i,
+                  barsSpace: 2,
+                  barRods: [
+                    BarChartRodData(
+                      toY: histTemp[i],
+                      color: AppTheme.colorPrimario.withOpacity(0.85),
+                      width: compact ? 4 : 6,
+                      borderRadius: BorderRadius.circular(2),
+                    ),
+                    BarChartRodData(
+                      toY: histHum[i],
+                      color: AppTheme.colorSecundario.withOpacity(0.85),
+                      width: compact ? 4 : 6,
+                      borderRadius: BorderRadius.circular(2),
+                    ),
+                  ],
+                ),
+              ),
+            )),
+          ),
+        ],
+      ),
+    );
+  }
+
+  // ============================================================
+  //  GRÁFICA CO₂ HORIZONTAL — colores por nivel
+  // ============================================================
+  Widget _graficaCo2Horizontal(bool compact) {
+    if (histCo2.isEmpty) return _sinDatos(compact);
+
+    // Colores por nivel de CO2
+    Color _colorCo2(double ppm) {
+      if (ppm >= 1000) return AppTheme.colorError;
+      if (ppm >= 600)  return const Color(0xFFFF8C00);
+      return const Color(0xFF00C17C);
+    }
+
+    // Limitar a últimas 10 lecturas para que quepan horizontal
+    final datos = histCo2.length > 10
+        ? histCo2.sublist(histCo2.length - 10)
+        : histCo2;
+    final tiempos = histTime.length > 10
+        ? histTime.sublist(histTime.length - 10)
+        : histTime;
+
+    final maxCo2 = datos.reduce((a, b) => a > b ? a : b);
+    // Aseguramos mínimo 1200 para que la escala tenga sentido
+    final escalaMax = maxCo2 < 1200 ? 1200.0 : maxCo2 * 1.1;
+
+    return Container(
+      height: compact ? (datos.length * 28.0) : (datos.length * 34.0),
+      padding: EdgeInsets.fromLTRB(
+          compact ? 8 : 12, compact ? 8 : 12, compact ? 8 : 12, 8),
+      decoration: BoxDecoration(
+        color: AppTheme.colorSuperficie,
+        borderRadius: BorderRadius.circular(compact ? 10 : 14),
+        border: Border.all(color: Colors.white.withOpacity(0.06)),
+      ),
+      child: Column(
+        children: List.generate(datos.length, (i) {
+          final ppm   = datos[i];
+          final color = _colorCo2(ppm);
+          final pct   = ppm / escalaMax;
+          final hora  = i < tiempos.length ? tiempos[i] : '';
+
+          return Expanded(
+            child: Padding(
+              padding: const EdgeInsets.symmetric(vertical: 2),
+              child: Row(
+                children: [
+                  // Hora
+                  SizedBox(
+                    width: compact ? 32 : 38,
+                    child: Text(hora,
+                      style: GoogleFonts.jetBrainsMono(
+                        fontSize: compact ? 7 : 8,
+                        color: Colors.white24,
+                      ),
+                    ),
+                  ),
+                  const SizedBox(width: 4),
+                  // Barra
+                  Expanded(
+                    child: Stack(
+                      children: [
+                        // Fondo
+                        Container(
+                          decoration: BoxDecoration(
+                            color: Colors.white.withOpacity(0.04),
+                            borderRadius: BorderRadius.circular(3),
+                          ),
+                        ),
+                        // Barra coloreada
+                        FractionallySizedBox(
+                          widthFactor: pct.clamp(0.0, 1.0),
+                          child: Container(
+                            decoration: BoxDecoration(
+                              color: color.withOpacity(0.85),
+                              borderRadius: BorderRadius.circular(3),
+                              boxShadow: [
+                                BoxShadow(
+                                  color: color.withOpacity(0.3),
+                                  blurRadius: 4,
+                                ),
+                              ],
+                            ),
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
+                  const SizedBox(width: 6),
+                  // Valor ppm
+                  SizedBox(
+                    width: compact ? 38 : 46,
+                    child: Text('${ppm.toInt()}',
+                      textAlign: TextAlign.right,
+                      style: GoogleFonts.jetBrainsMono(
+                        fontSize: compact ? 8 : 9,
+                        color: color,
+                        fontWeight: FontWeight.bold,
+                      ),
+                    ),
+                  ),
+                ],
+              ),
+            ),
+          );
+        }),
+      ),
+    );
+  }
+
+  // ============================================================
+  //  GRÁFICA PASTEL — promedios normalizados
+  // ============================================================
+  Widget _graficaPastel(bool compact) {
+    if (histTemp.isEmpty || histHum.isEmpty || histCo2.isEmpty) {
+      return _sinDatos(compact);
+    }
+
+    // Calcular promedios
+    final promTemp = histTemp.reduce((a, b) => a + b) / histTemp.length;
+    final promHum  = histHum.reduce((a, b)  => a + b) / histHum.length;
+    final promCo2  = histCo2.reduce((a, b)  => a + b) / histCo2.length;
+
+    // Normalizar a escala 0-100
+    final normTemp = (promTemp / 50.0  * 100).clamp(0.0, 100.0);
+    final normHum  = (promHum  / 100.0 * 100).clamp(0.0, 100.0);
+    final normCo2  = (promCo2  / 5000.0 * 100).clamp(0.0, 100.0);
+
+    final total = normTemp + normHum + normCo2;
+
+    final secciones = [
+      {
+        'label': 'TEMP',
+        'valor': promTemp,
+        'unidad': '°C',
+        'norm': normTemp,
+        'pct': total > 0 ? (normTemp / total * 100) : 0.0,
+        'color': AppTheme.colorPrimario,
+      },
+      {
+        'label': 'HUM',
+        'valor': promHum,
+        'unidad': '%',
+        'norm': normHum,
+        'pct': total > 0 ? (normHum / total * 100) : 0.0,
+        'color': AppTheme.colorSecundario,
+      },
+      {
+        'label': 'CO₂',
+        'valor': promCo2,
+        'unidad': 'ppm',
+        'norm': normCo2,
+        'pct': total > 0 ? (normCo2 / total * 100) : 0.0,
+        'color': AppTheme.colorError,
+      },
+    ];
+
+    return Container(
+      padding: EdgeInsets.all(compact ? 12 : 16),
+      decoration: BoxDecoration(
+        color: AppTheme.colorSuperficie,
+        borderRadius: BorderRadius.circular(compact ? 10 : 14),
+        border: Border.all(color: Colors.white.withOpacity(0.06)),
+      ),
+      child: Row(
+        children: [
+          // Pastel
+          SizedBox(
+            width: compact ? 120 : 150,
+            height: compact ? 120 : 150,
+            child: PieChart(
+              PieChartData(
+                sectionsSpace: 3,
+                centerSpaceRadius: compact ? 28 : 35,
+                sections: secciones.map((s) {
+                  final color = s['color'] as Color;
+                  final pct   = s['pct'] as double;
+                  return PieChartSectionData(
+                    value: s['norm'] as double,
+                    color: color,
+                    radius: compact ? 36 : 44,
+                    showTitle: pct > 8,
+                    title: '${pct.toStringAsFixed(0)}%',
+                    titleStyle: GoogleFonts.orbitron(
+                      fontSize: compact ? 8 : 9,
+                      fontWeight: FontWeight.w900,
+                      color: Colors.white,
+                    ),
+                    badgeWidget: null,
+                  );
+                }).toList(),
+              ),
+            ),
+          ),
+
+          SizedBox(width: compact ? 16 : 24),
+
+          // Leyenda con valores reales
+          Expanded(
+            child: Column(
+              mainAxisAlignment: MainAxisAlignment.center,
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text('PROMEDIO SESIÓN',
+                  style: GoogleFonts.spaceGrotesk(
+                    fontSize: compact ? 8 : 9,
+                    color: Colors.white24,
+                    letterSpacing: 1.5,
+                    fontWeight: FontWeight.bold,
+                  ),
+                ),
+                SizedBox(height: compact ? 8 : 12),
+                ...secciones.map((s) {
+                  final color  = s['color'] as Color;
+                  final valor  = s['valor'] as double;
+                  final pct    = s['pct'] as double;
+                  final unidad = s['unidad'] as String;
+                  final label  = s['label'] as String;
+
+                  return Padding(
+                    padding: EdgeInsets.only(bottom: compact ? 8 : 10),
+                    child: Row(
+                      children: [
+                        // Punto color
+                        Container(
+                          width: compact ? 7 : 9,
+                          height: compact ? 7 : 9,
+                          decoration: BoxDecoration(
+                            color: color,
+                            shape: BoxShape.circle,
+                            boxShadow: [
+                              BoxShadow(
+                                color: color.withOpacity(0.5),
+                                blurRadius: 4,
+                              ),
+                            ],
+                          ),
+                        ),
+                        SizedBox(width: compact ? 6 : 8),
+                        // Label
+                        Text(label,
+                          style: GoogleFonts.spaceGrotesk(
+                            fontSize: compact ? 9 : 10,
+                            color: Colors.white38,
+                            fontWeight: FontWeight.bold,
+                          ),
+                        ),
+                        const Spacer(),
+                        // Valor real
+                        Column(
+                          crossAxisAlignment: CrossAxisAlignment.end,
+                          children: [
+                            Text(
+                              unidad == 'ppm'
+                                  ? '${valor.toStringAsFixed(0)} $unidad'
+                                  : '${valor.toStringAsFixed(1)} $unidad',
+                              style: GoogleFonts.jetBrainsMono(
+                                fontSize: compact ? 9 : 10,
+                                color: color,
+                                fontWeight: FontWeight.bold,
+                              ),
+                            ),
+                            Text(
+                              '${pct.toStringAsFixed(1)}% del total',
+                              style: GoogleFonts.jetBrainsMono(
+                                fontSize: compact ? 7 : 8,
+                                color: Colors.white24,
+                              ),
+                            ),
+                          ],
+                        ),
+                      ],
+                    ),
+                  );
+                }).toList(),
+              ],
+            ),
+          ),
+        ],
       ),
     );
   }
