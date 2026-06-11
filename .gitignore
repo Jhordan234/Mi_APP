@@ -63,3 +63,6 @@ ios/Pods/
 
 # Variables de entorno
 .env
+
+#lib
+lib/firebase_options.dart
